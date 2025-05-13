@@ -38,15 +38,27 @@
     "activationEvents": [
         "*",
         "onCommand:inlineBookmarks.debug.state.reset",
-        "onCommand:inlineBookmarks.processBookmarks"
+        "onCommand:inlineBookmarks.processBookmarks",
+        "onCommand:inlineBookmarks.exportToJson",
+        "onCommand:inlineBookmarks.syncBookmarks"
     ],
     "main": "./src/extension.js",
     "contributes": {
         "commands": [
             {
                 "command": "inlineBookmarks.processBookmarks",
-                "title": "Process Bookmarks and Copy Debug Info",
-                "category": "InlineBookmarks:Debug"
+                "title": "Process Bookmarks",
+                "category": "InlineBookmarks"
+            },
+            {
+                "command": "inlineBookmarks.exportToJson",
+                "title": "Export Bookmarks to JSON",
+                "category": "InlineBookmarks"
+            },
+            {
+                "command": "inlineBookmarks.syncBookmarks",
+                "title": "Sync Bookmarks (Export, API, Process)",
+                "category": "InlineBookmarks"
             },
             {
                 "command": "inlineBookmarks.debug.state.reset",
@@ -159,6 +171,16 @@
                     "type": "number",
                     "default": 5120,
                     "description": "Max files for searching"
+                },
+                "inline-bookmarks.api.url": {
+                    "type": "string",
+                    "default": "https://api.example.com/bookmarks",
+                    "description": "API endpoint URL for syncing bookmarks"
+                },
+                "inline-bookmarks.api.key": {
+                    "type": "string",
+                    "default": "",
+                    "description": "API key for authentication when syncing bookmarks"
                 }
             }
         }

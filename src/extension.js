@@ -29,89 +29,115 @@ function onActivate(context) {
                 statusBar.text = "$(search) Processing bookmarks...";
                 statusBar.show();
                 
+                // Import required modules
+                const crypto = require('crypto');
+                
                 // Refresh and scan workspace for bookmarks
                 auditTags.commands.refresh();
                 await auditTags.commands.scanWorkspaceBookmarks();
                 
-                // Now create a structured array of all bookmarks with their data
-                const bookmarksArray = [];
-                const crypto = require('crypto');
-                const path = require('path');
+                // Process all bookmarks in all files and mark them as processed
+                let processedCount = 0;
                 
-                // Process all bookmarks in all files
                 Object.keys(auditTags.bookmarks).forEach(fileUri => {
-                    const fileObj = {
-                        fileUri: fileUri,
-                        fileName: path.basename(vscode.Uri.parse(fileUri).fsPath),
-                        categories: {}
-                    };
-                    
                     // Process each category of bookmarks
                     Object.keys(auditTags.bookmarks[fileUri]).forEach(category => {
-                        fileObj.categories[category] = [];
-                        
                         // Process each bookmark
                         auditTags.bookmarks[fileUri][category].forEach(bookmark => {
                             // Mark as processed
                             bookmark.processed = true;
+                            processedCount++;
                             
-                            // Get the file path from URI
-                            const filePath = vscode.Uri.parse(fileUri).fsPath;
-                            
-                            // Create deeplink for this bookmark
-                            // Format: windsurf://file//<filepath>:<line>
-                            const deeplink = `windsurf://file/${filePath}:${bookmark.range.start.line + 1}`;
-                            
-                            // Create a clean version for JSON
-                            const cleanBookmark = {
-                                id: crypto.createHash('sha1').update(JSON.stringify({
-                                    uri: fileUri,
-                                    category: category,
-                                    line: bookmark.range.start.line,
-                                    text: bookmark.text.trim()
-                                })).digest('hex'),
-                                text: bookmark.text,
+                            // Generate ID for tracking processed state
+                            const bookmarkId = crypto.createHash('sha1').update(JSON.stringify({
+                                uri: fileUri,
+                                category: category,
                                 line: bookmark.range.start.line,
-                                processed: true,
-                                deeplink: deeplink, // Add the deeplink
-                                range: {
-                                    start: {
-                                        line: bookmark.range.start.line,
-                                        character: bookmark.range.start.character
-                                    },
-                                    end: {
-                                        line: bookmark.range.end.line,
-                                        character: bookmark.range.end.character
-                                    }
-                                }
-                            };
+                                text: bookmark.text.trim()
+                            })).digest('hex');
                             
-                            fileObj.categories[category].push(cleanBookmark);
+                            // Store processed state if state manager is available
+                            if (auditTags._stateManager) {
+                                auditTags._stateManager.setProcessed(bookmarkId, true);
+                            }
                         });
                     });
-                    
-                    bookmarksArray.push(fileObj);
                 });
                 
-                // Create debug info object
-                const debugInfo = {
+                // Hide status bar and show success message
+                statusBar.hide();
+                vscode.window.showInformationMessage(
+                    `Processed ${processedCount} bookmarks across ${Object.keys(auditTags.bookmarks).length} files.`
+                );
+            } catch (error) {
+                console.error('Error processing bookmarks:', error);
+                vscode.window.showErrorMessage(`Error processing bookmarks: ${error.message}`);
+            }
+        })
+    );
+    
+    context.subscriptions.push(
+        vscode.commands.registerCommand("inlineBookmarks.exportToJson", async () => {
+            try {
+                // Show status while exporting
+                const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+                statusBar.text = "$(json) Exporting bookmarks to JSON...";
+                statusBar.show();
+                
+                // Import required modules
+                const path = require('path');
+                
+                // Array to store simplified bookmark data
+                const unprocessedBookmarks = [];
+                let totalUnprocessed = 0;
+                
+                // Process all bookmarks in all files
+                Object.keys(auditTags.bookmarks).forEach(fileUri => {
+                    // Process each category of bookmarks
+                    Object.keys(auditTags.bookmarks[fileUri]).forEach(category => {
+                        // Process each bookmark
+                        auditTags.bookmarks[fileUri][category].forEach(bookmark => {
+                            // Only include unprocessed bookmarks
+                            if (bookmark.processed !== true) {
+                                totalUnprocessed++;
+                                
+                                // Get the file path from URI
+                                const filePath = vscode.Uri.parse(fileUri).fsPath;
+                                
+                                // Create deeplink for this bookmark
+                                // Format: windsurf://file//<filepath>:<line>
+                                const deeplink = `windsurf://file/${filePath}:${bookmark.range.start.line + 1}`;
+                                
+                                // Create simplified bookmark object
+                                unprocessedBookmarks.push({
+                                    text: bookmark.text,
+                                    deeplink: deeplink,
+                                    type: category
+                                });
+                            }
+                        });
+                    });
+                });
+                
+                // Create the simplified output object
+                const output = {
                     timestamp: new Date().toISOString(),
-                    totalFiles: bookmarksArray.length,
-                    bookmarks: bookmarksArray
+                    totalUnprocessed: totalUnprocessed,
+                    bookmarks: unprocessedBookmarks
                 };
                 
                 // Copy to clipboard
-                const jsonString = JSON.stringify(debugInfo, null, 2);
+                const jsonString = JSON.stringify(output, null, 2);
                 await vscode.env.clipboard.writeText(jsonString);
                 
                 // Hide status bar and show success message
                 statusBar.hide();
                 vscode.window.showInformationMessage(
-                    `Processed ${debugInfo.totalFiles} files with bookmarks. Debug data copied to clipboard.`
+                    `Exported ${totalUnprocessed} unprocessed bookmarks to JSON. Data copied to clipboard.`
                 );
             } catch (error) {
-                console.error('Error processing bookmarks:', error);
-                vscode.window.showErrorMessage(`Error processing bookmarks: ${error.message}`);
+                console.error('Error exporting bookmarks to JSON:', error);
+                vscode.window.showErrorMessage(`Error exporting bookmarks: ${error.message}`);
             }
         })
     );
