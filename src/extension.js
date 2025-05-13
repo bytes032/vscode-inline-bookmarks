@@ -271,7 +271,6 @@ function onActivate(context) {
                         headers: {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${apiKey}`,
-                            'User-Agent': 'VSCode-InlineBookmarks-Extension'
                         }
                     };
                     
