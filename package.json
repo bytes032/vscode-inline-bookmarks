@@ -181,6 +181,11 @@
                     "type": "string",
                     "default": "",
                     "description": "API key for authentication when syncing bookmarks"
+                },
+                "inline-bookmarks.project.name": {
+                    "type": "string",
+                    "default": "${workspaceFolderBasename}",
+                    "description": "Project name to include in the exported bookmark data. The default uses the workspace folder name."
                 }
             }
         }

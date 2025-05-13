@@ -84,6 +84,18 @@ function onActivate(context) {
                 statusBar.text = "$(json) Exporting bookmarks to JSON...";
                 statusBar.show();
                 
+                // Get project name from configuration (with fallback to workspace folder name)
+                const config = vscode.workspace.getConfiguration('inline-bookmarks');
+                let projectName = config.get('project.name') || '';
+                
+                // If project name has the default variable ${workspaceFolderBasename}, replace it
+                if (projectName === '${workspaceFolderBasename}' && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                    projectName = vscode.workspace.workspaceFolders[0].name;
+                } else if (projectName === '${workspaceFolderBasename}') {
+                    // Fallback if no workspace is open
+                    projectName = 'unknown-project';
+                }
+                
                 // Array to store simplified bookmark data
                 const unprocessedBookmarks = [];
                 let totalUnprocessed = 0;
@@ -116,8 +128,14 @@ function onActivate(context) {
                     });
                 });
                 
-                // Copy just the bookmarks array to clipboard
-                const jsonString = JSON.stringify(unprocessedBookmarks, null, 2);
+                // Prepare the output with project name and bookmarks
+                const output = {
+                    project: projectName,
+                    bookmarks: unprocessedBookmarks
+                };
+                
+                // Copy to clipboard
+                const jsonString = JSON.stringify(output, null, 2);
                 await vscode.env.clipboard.writeText(jsonString);
                 
                 // Hide status bar and show success message
@@ -151,10 +169,21 @@ function onActivate(context) {
                 const https = require('https');
                 const http = require('http');
                 
-                // Get API settings from configuration
+                // Get API settings and project name from configuration
                 const config = vscode.workspace.getConfiguration('inline-bookmarks');
                 const apiUrl = config.get('api.url') || 'https://api.example.com/bookmarks';
                 const apiKey = config.get('api.key') || 'demo-key-12345';
+                
+                // Get project name (with fallback to workspace folder name)
+                let projectName = config.get('project.name') || '';
+                
+                // If project name has the default variable ${workspaceFolderBasename}, replace it
+                if (projectName === '${workspaceFolderBasename}' && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                    projectName = vscode.workspace.workspaceFolders[0].name;
+                } else if (projectName === '${workspaceFolderBasename}') {
+                    // Fallback if no workspace is open
+                    projectName = 'unknown-project';
+                }
                 
                 // Refresh and scan workspace for up-to-date bookmarks
                 auditTags.commands.refresh();
@@ -216,7 +245,13 @@ function onActivate(context) {
                     return;
                 }
                 
-                // Make API call with the unprocessed bookmarks - direct array format
+                // Prepare the output with project name and bookmarks
+                const output = {
+                    project: projectName,
+                    bookmarks: unprocessedBookmarks
+                };
+                
+                // Make API call with the unprocessed bookmarks
                 statusBar.text = `$(sync~spin) Sending ${totalUnprocessed} bookmarks to API...`;
                 
                 // Create promise for API request
@@ -269,8 +304,8 @@ function onActivate(context) {
                         reject(error);
                     });
                     
-                    // Send data - direct array of bookmarks
-                    req.write(JSON.stringify(unprocessedBookmarks));
+                    // Send data - project name and bookmarks
+                    req.write(JSON.stringify(output));
                     req.end();
                 });
                 
