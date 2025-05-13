@@ -16,10 +16,8 @@
         "audit-tag",
         "tag",
         "sticky",
-        "jump",
         "mark",
         "selection",
-        "navigation",
         "highlight"
     ],
     "publisher": "tintinweb",
@@ -66,13 +64,6 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Enable/Disable the extension."
-                },
-
-                "inline-bookmarks.view.exclude.gitIgnore": {
-                    "category": "view",
-                    "type": "boolean",
-                    "default": false,
-                    "markdownDescription": "Hide items from the bookmark view that match an exclusion defined by a .gitignore file (requires reload)"
                 },
                 "inline-bookmarks.default.words.red": {
                     "category": "trigger words",

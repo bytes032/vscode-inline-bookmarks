@@ -132,143 +132,70 @@ class Commands {
         this.controller = controller;
     }
 
+    /**
+     * Refreshes bookmark data by reloading from workspace
+     */
     refresh() {
-        Object.keys(this.controller.bookmarks).forEach(uri => {
-            vscode.workspace.openTextDocument(vscode.Uri.parse(uri)).then(document => {
-                this.controller.updateBookmarks(document);
-            });
-        }, this);
+        this.controller._reset = true;
+        this.controller.loadFromWorkspace();
     }
 
-    showSelectBookmark(filter, placeHolder) {
-
-        let entries = [];
-        Object.keys(this.controller.bookmarks).forEach(uri => {
-            let resource = vscode.Uri.parse(uri).fsPath;
-            let fname = path.parse(resource).base;
-
-            if(filter && !filter(resource)){
-                return;
-            }
-
-            Object.keys(this.controller.bookmarks[uri]).forEach(cat => {
-                this.controller.bookmarks[uri][cat].forEach(b => {
-                    entries.push({
-                        label: b.text,
-                        description: fname,
-                        target: new vscode.Location(resource, b.range)
-                    });
-                });
-            });
-
-        }, this);
-
-        vscode.window.showQuickPick(entries, { placeHolder: placeHolder || 'Select bookmarks' }).then(item => {
-            vscode.commands.executeCommand("inlineBookmarks.jumpToRange", item.target.uri, item.target.range);
-        });
-    }
-
-    showSelectVisibleBookmark() {
-        let visibleEditorUris = vscode.window.visibleTextEditors.map(te => te.document.uri.fsPath);
-        this.showSelectBookmark((resFsPath) => visibleEditorUris.includes(resFsPath), "Select visible bookmarks");
-    }
-
-    showListBookmarks(filter) {
-
-        if (!vscode.window.outputChannel) {
-            vscode.window.outputChannel = vscode.window.createOutputChannel('inlineBookmarks');
-        }
-
-        if (!vscode.window.outputChannel) return;
-        vscode.window.outputChannel.clear();
-
-        let entries = [];
-        Object.keys(this.controller.bookmarks).forEach(uri => {
-            let resource = vscode.Uri.parse(uri).fsPath;
-            let fname = path.parse(resource).base;
-
-            if(filter && !filter(resource)){
-                return;
-            }
-
-            Object.keys(this.controller.bookmarks[uri]).forEach(cat => {
-                this.controller.bookmarks[uri][cat].forEach(b => {
-                    entries.push({
-                        label: b.text,
-                        description: fname,
-                        target: new vscode.Location(resource, b.range)
-                    });
-                });
-            });
-
-        }, this);
-
-        if (entries.length === 0) {
-            vscode.window.showInformationMessage('No results');
-            return;
-        }
-
-        entries.forEach(function (v, i, a) {
-            var patternA = '#' + (i + 1) + '\t' + v.target.uri + '#' + (v.target.range.start.line + 1);
-            var patternB = '#' + (i + 1) + '\t' + v.target.uri + ':' + (v.target.range.start.line + 1) + ':' + (v.target.range.start.character + 1);
-            var patterns = [patternA, patternB];
-
-            var patternType = 0;
-            if (os.platform() == "linux") {
-                patternType = 1;
-            }
-            patternType = +!patternType;
-
-            vscode.window.outputChannel.appendLine(patterns[patternType]);
-            vscode.window.outputChannel.appendLine('\t' + v.label + '\n');
-        });
-        vscode.window.outputChannel.show();
-    }
-
-    showListVisibleBookmarks() {
-        let visibleEditorUris = vscode.window.visibleTextEditors.map(te => te.document.uri.fsPath);
-        this.showListBookmarks((resFsPath) => visibleEditorUris.includes(resFsPath));
-    }
-
+    /**
+     * Scans the workspace for bookmarks
+     * @returns {Promise} A promise that resolves when the scan is complete
+     */
     scanWorkspaceBookmarks() {
-
-        function arrayToSearchGlobPattern(config) {
+        const arrayToSearchGlobPattern = (config) => {
             return Array.isArray(config) ?
                 '{' + config.join(',') + '}'
                 : (typeof config == 'string' ? config : '');
-        }
+        };
 
-        var includePattern = arrayToSearchGlobPattern(settings.extensionConfig().search.includes) || '{**/*}';
-        var excludePattern = arrayToSearchGlobPattern(settings.extensionConfig().search.excludes);
-        var limit = settings.extensionConfig().search.maxFiles;
+        let includePattern = arrayToSearchGlobPattern(settings.extensionConfig().search.includes) || '{**/*}';
+        let excludePattern = arrayToSearchGlobPattern(settings.extensionConfig().search.excludes);
+        let limit = settings.extensionConfig().search.maxFiles;
 
-        let that = this;
+        return new Promise((resolve, reject) => {
+            vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: "Scanning for bookmarks",
+                cancellable: true
+            }, async (progress, token) => {
     
-        vscode.workspace.findFiles(includePattern, excludePattern, limit).then(function (files) {
-    
-            if (!files || files.length === 0) {
-                console.log('No files found' );
-                return;
-            }
-    
-            var totalFiles = files.length;
-
-            for (var i = 0; i < totalFiles; i++) {
-    
-                vscode.workspace.openTextDocument(files[i]).then((document) => {
-                    that.controller.updateBookmarks(document);
-                    //NOP
-                }, (err) => {
-                    console.error(err);
+                token.onCancellationRequested(() => {
+                    console.log("User canceled the scan operation");
+                    reject(new Error("Operation cancelled"));
                 });
     
-            }
-            
-        }, (err) => {
-            console.error(err);
+                try {
+                    let files = await vscode.workspace.findFiles(includePattern, excludePattern, limit);
+                    
+                    let cnt = 0;
+                    for (let i = 0; i < files.length; i++) {
+                        if (token.isCancellationRequested) {
+                            reject(new Error("Operation cancelled"));
+                            return;
+                        }
+                        try {
+                            await vscode.workspace.openTextDocument(files[i]).then(document => {
+                                return this.controller.updateBookmarks(document);
+                            });
+                        } catch(e){
+                            console.warn(`Error while scanning document ${files[i]}: ${e}`);
+                        }
+                        
+                        progress.report({
+                            increment: 100 / files.length,
+                            message: `Scanning file ${i + 1}/${files.length} (${cnt} bookmarks)`
+                        });
+                    }
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            });
         });
     }
-
 }
 
 class InlineBookmarksCtrl {
@@ -562,235 +489,6 @@ class InlineBookmarksCtrl {
     }
 }
 
-const NodeType = {
-    FILE: 1,
-    LOCATION: 2
-};
-
-
-class InlineBookmarksDataModel {
-
-    /** treedata model */
-
-    constructor(controller) {
-        this.controller = controller;
-    }
-
-    getRoot() {  /** returns element */
-        let fileBookmarks = Object.keys(this.controller.bookmarks);
-        
-        if (settings.extensionConfig().view.showVisibleFilesOnly) {
-
-            let visibleEditorUris;
-            if(settings.extensionConfig().view.showVisibleFilesOnlyMode === "onlyActiveEditor") {
-                visibleEditorUris = [vscode.window.activeTextEditor.document.uri.path];
-            } else {
-                visibleEditorUris = vscode.window.visibleTextEditors.map(te => te.document.uri.path);
-            }
-
-            fileBookmarks = fileBookmarks.filter(v => visibleEditorUris.includes(vscode.Uri.parse(v).path));
-        }
-
-        return fileBookmarks.sort().map(v => {
-            return {
-                resource: vscode.Uri.parse(v),
-                tooltip: v,
-                name: v,
-                type: NodeType.FILE,
-                parent: null,
-                iconPath: vscode.ThemeIcon.File,
-                location: null
-            };
-        });
-    }
-
-    getChildren(element) {
-        switch (element.type) {
-            case NodeType.FILE:
-                let bookmarks = Object.keys(this.controller.bookmarks[element.name]).map(cat => {
-                    //all categories
-                    return this.controller.bookmarks[element.name][cat].map(v => {
-                        let location = new vscode.Location(element.resource, v.range);
-                        return {
-                            resource: element.resource,
-                            location: location,
-                            label: v.text.trim(),
-                            name: v.text.trim(),
-                            type: NodeType.LOCATION,
-                            category: cat,
-                            parent: element,
-                            iconPath: this.controller.styles[cat].options.gutterIconPath
-                        };
-                    });
-                }).flat(1);
-
-                return bookmarks.sort((a, b) => a.location.range.start.line - b.location.range.start.line);
-                break;
-        }
-    }
-
-    /**
-    Find previous and next of element (for goto_next, goto_previous)
-
-    requires current element from tree
-    */
-    getNeighbors(element) {
-        let ret = { previous: null, next: null };
-        let parent = element.parent;
-        if (!parent) {
-            //fake the parent
-            parent = { ...element };  //use parent or derive it from bookmark
-            parent.type = NodeType.FILE;
-            parent.name = element.resource;
-        }
-
-        //get all children
-        let bookmarks = this.getChildren(parent);
-
-        //lets track if we're at our element.
-        let gotElement = false;
-
-        for (let b of bookmarks) {
-            // find element in list, note prevs, next
-            if (!gotElement && JSON.stringify(b.location) == JSON.stringify(element.location)) {
-                gotElement = true;
-                continue;
-            }
-            if (!gotElement) {
-                ret.previous = b;
-            } else {
-                ret.next = b;
-                break;
-            }
-        }
-
-        return ret;
-    }
-
-}
-
-class InlineBookmarkTreeDataProvider {
-
-    constructor(inlineBookmarksController) {
-        this._onDidChangeTreeData = new vscode.EventEmitter();
-        this.onDidChangeTreeData = this._onDidChangeTreeData.event;
-
-        this.controller = inlineBookmarksController;
-        this.model = new InlineBookmarksDataModel(inlineBookmarksController);
-
-        this.filterTreeViewWords = [];
-        this.gitIgnoreHandler = undefined;
-    }
-
-    /** events */
-
-    /** methods */
-
-    getChildren(element) {  
-        return this._filterTreeView(element ? this.model.getChildren(element) : this.model.getRoot());
-    }
-
-    getParent(element) {
-        return element ? element.parent : element;
-    }
-
-    getTreeItem(element) {
-        if (!element) {
-            return element; // undef
-        }
-        let item = new vscode.TreeItem(
-            this._formatLabel(element.label), 
-            element.type == NodeType.LOCATION ? 0 : settings.extensionConfig().view.expanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
-            );
-        item.id = element.type == NodeType.LOCATION ? this._getId(element.location) : this._getId(element.resource);
-        item.resourceUri = element.resource;
-        item.iconPath = element.iconPath;
-        
-        // Add processed status to bookmarks (if applicable)
-        if (element.type === NodeType.LOCATION) {
-            item.contextValue = 'bookmark';
-            
-            // Check if this bookmark is processed
-            const fileUri = element.resource.toString();
-            const line = element.location.range.start.line;
-            const text = element.label.trim();
-            let processed = false;
-            
-            // Find the bookmark in the controller data
-            if (this.controller.bookmarks[fileUri]) {
-                for (const category of Object.keys(this.controller.bookmarks[fileUri])) {
-                    const bookmarks = this.controller.bookmarks[fileUri][category];
-                    for (const bookmark of bookmarks) {
-                        if (bookmark.range.start.line === line && bookmark.text.trim() === text) {
-                            if (bookmark.processed === true) {
-                                processed = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (processed) break;
-                }
-            }
-            
-            // Add description for processed bookmarks
-            if (processed) {
-                item.description = '✓ Processed';
-            }
-        }
-        
-        item.command = element.type == NodeType.LOCATION && element.location ? {
-            command: 'inlineBookmarks.jumpToRange',
-            arguments: [element.location.uri, element.location.range],
-            title: 'JumpTo'
-        } : 0;
-        return item;
-    }
-
-    /* 
-    Hash object to unique ID.
-    */
-    _getId(o) {
-        return crypto.createHash('sha1').update(JSON.stringify(o)).digest('hex');
-    }
-
-    _formatLabel(label) {
-        if (!settings.extensionConfig().view.words.hide || !label) {
-            return label;
-        }
-        let words = Object.values(this.controller.words).flat(1);
-        return words.reduce((prevs, word) => prevs.replace(new RegExp(word, "g"), ""), label);  //replace tags in matches.
-    }
-
-    _filterTreeView(elements) {
-
-        if(this.gitIgnoreHandler && this.gitIgnoreHandler.filter){
-            elements = elements.filter(e => this.gitIgnoreHandler.filter(e.resource));
-        }
-
-        if (this.filterTreeViewWords && this.filterTreeViewWords.length) {
-            elements = elements.filter(e => this.filterTreeViewWords.some(rx => new RegExp(rx, 'g').test(e.label)));
-        }
-
-        return elements;
-    }
-    /** other methods */
-
-    setTreeViewFilterWords(words) {
-        this.filterTreeViewWords = words;
-    }
-
-    setTreeViewGitIgnoreHandler(gi) {
-        this.gitIgnoreHandler = gi;
-    }
-
-    refresh() {
-        this._onDidChangeTreeData.fire();
-    }
-}
-
-
 module.exports = {
-    InlineBookmarksCtrl: InlineBookmarksCtrl,
-    InlineBookmarkTreeDataProvider: InlineBookmarkTreeDataProvider,
-    NodeType: NodeType
+    InlineBookmarksCtrl: InlineBookmarksCtrl
 };

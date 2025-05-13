@@ -8,13 +8,11 @@
 /** imports */
 const vscode = require('vscode');
 const settings = require('./settings');
-const {InlineBookmarksCtrl, InlineBookmarkTreeDataProvider} = require('./features/inlineBookmarks');
-const GitIgnore = require('./features/gitignore');
+const {InlineBookmarksCtrl} = require('./features/inlineBookmarks');
 
 
 function onActivate(context) {
     const auditTags = new InlineBookmarksCtrl(context);
-    const treeDataProvider = new InlineBookmarkTreeDataProvider(auditTags);
 
     context.subscriptions.push(
         vscode.commands.registerCommand("inlineBookmarks.debug.state.reset", () => {
@@ -111,9 +109,6 @@ function onActivate(context) {
                 vscode.window.showInformationMessage(
                     `Processed ${debugInfo.totalFiles} files with bookmarks. Debug data copied to clipboard.`
                 );
-                
-                // Refresh decorations
-                treeDataProvider.refresh();
             } catch (error) {
                 console.error('Error processing bookmarks:', error);
                 vscode.window.showErrorMessage(`Error processing bookmarks: ${error.message}`);
@@ -125,7 +120,6 @@ function onActivate(context) {
 
     /** module init */
     auditTags.commands.refresh();
-    treeDataProvider.refresh();
 
     // Define activeEditor for use in event handlers
     let activeEditor = vscode.window.activeTextEditor;
@@ -167,7 +161,6 @@ function onActivate(context) {
             if(settings.extensionConfig().enable){
                 auditTags.decorate(editor);
             }
-            treeDataProvider.refresh();
             resolve();
         });
     }
@@ -176,29 +169,11 @@ function onActivate(context) {
             if(editor && settings.extensionConfig().enable){
                 auditTags.decorate(editor);
             }
-            treeDataProvider.refresh();
             resolve();
         });
     }
 
-    /************* file-system watcher features */
-    if(settings.extensionConfig().view.exclude.gitIgnore){
-        /* optional feature */
-        const gitIgnoreFilter = new GitIgnore();
-        // Initialize the GitIgnore file watcher for excluding files
-        const gitIgnoreWatcher = vscode.workspace.createFileSystemWatcher('**/.gitignore');
-        context.subscriptions.push(gitIgnoreWatcher);
-        
-        gitIgnoreWatcher.onDidChange(uri => gitIgnoreFilter.onDidChange(uri));
-        gitIgnoreWatcher.onDidDelete(uri => gitIgnoreFilter.onDidDelete(uri));
-        gitIgnoreWatcher.onDidCreate(uri => gitIgnoreFilter.onDidChange(uri));
-
-        vscode.workspace.findFiles('**/.gitignore', '**​/node_modules/**', 20).then(uri => {
-            if(uri && uri.length){
-                uri.forEach(u => gitIgnoreFilter.onDidChange(u));
-            }
-        });
-    }
+    // No file-system watcher features needed without tree view
 }
 
 /* exports */
