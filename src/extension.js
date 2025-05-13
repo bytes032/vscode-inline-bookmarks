@@ -7,7 +7,6 @@
  * */
 /** imports */
 const vscode = require('vscode');
-const crypto = require('crypto');
 const settings = require('./settings');
 const {InlineBookmarksCtrl, InlineBookmarkTreeDataProvider} = require('./features/inlineBookmarks');
 const GitIgnore = require('./features/gitignore');
@@ -18,6 +17,8 @@ function editorJumptoRange(range, editor) {
     editor = editor || vscode.window.activeTextEditor; //provided editor or fall back to active
 
     let revealType = vscode.TextEditorRevealType.InCenter;
+
+    // @audit
     let selection = new vscode.Selection(range.start.line, range.start.character, range.end.line, range.end.character);
 
     if (range.start.line === editor.selection.active.line) {
@@ -78,11 +79,21 @@ function onActivate(context) {
 
     var activeEditor = vscode.window.activeTextEditor;
 
-    // No tree view - only core bookmark functionality
+    /** register views */
+    const treeView = vscode.window.createTreeView('inlineBookmarksExplorer', { treeDataProvider: treeDataProvider });
+    /*
+    context.subscriptions.push(treeView);
+    */
+    /*
     context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.jumpToRange", (uri, range) => {
-            // command called from 'select' dropdown. open document and jump to range.
-            vscode.workspace.openTextDocument(uri).then(doc => {
+        vscode.window.registerTreeDataProvider("inlineBookmarksExplorer", treeDataProvider)
+    );
+    */
+    
+    /** register commands */
+    context.subscriptions.push(
+        vscode.commands.registerCommand("inlineBookmarks.jumpToRange", (documentUri, range) => {
+            vscode.workspace.openTextDocument(documentUri).then(doc => {
                 vscode.window.showTextDocument(doc).then(editor => {
                     editorJumptoRange(range, editor);
                 });
@@ -92,13 +103,7 @@ function onActivate(context) {
     context.subscriptions.push(
         vscode.commands.registerCommand("inlineBookmarks.refresh", () => {
             auditTags.commands.refresh();
-            
-            // Also refresh current editor decorations
-            if (vscode.window.activeTextEditor) {
-                auditTags.decorate(vscode.window.activeTextEditor);
-            }
-            
-            vscode.window.showInformationMessage('Inline Bookmarks refreshed');
+            treeDataProvider.refresh();
         })
     );
     context.subscriptions.push(
@@ -207,13 +212,39 @@ function onActivate(context) {
         vscode.commands.registerCommand("inlineBookmarks.debug.state.reset", () => {
             auditTags.resetWorkspace();
             auditTags.loadFromWorkspace();
-            // Refresh if there's an active editor
-            if (vscode.window.activeTextEditor) {
-                auditTags.decorate(vscode.window.activeTextEditor);
-            }
-            vscode.window.showInformationMessage('Inline Bookmarks state reset successfully');
+            treeDataProvider.refresh();
         })
     );
+    context.subscriptions.push(
+        vscode.commands.registerCommand("inlineBookmarks.showSelectBookmark", () => {
+            auditTags.commands.showSelectBookmark();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("inlineBookmarks.showSelectVisibleBookmark", () => {
+            auditTags.commands.showSelectVisibleBookmark();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("inlineBookmarks.listBookmarks", () => {
+            auditTags.commands.showListBookmarks();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("inlineBookmarks.listVisibleBookmarks", () => {
+            auditTags.commands.showListVisibleBookmarks();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("inlineBookmarks.scanWorkspace", () => {
+            auditTags.commands.scanWorkspaceBookmarks();
+        })
+    );
+
     context.subscriptions.push(
         vscode.commands.registerCommand("inlineBookmarks.processBookmarks", async () => {
             // First scan the workspace for bookmarks
@@ -259,91 +290,119 @@ function onActivate(context) {
                 
                 // Now create a structured array of all bookmarks with their data
                 const bookmarksArray = [];
+                const crypto = require('crypto');
+                const path = require('path');
                 
                 // Process all bookmarks in all files
                 Object.keys(auditTags.bookmarks).forEach(fileUri => {
-                const fileObj = {
-                    fileUri: fileUri,
-                    fileName: fileUri.split('/').pop(),
-                    categories: {}
-                };
-                
-                // Process each category of bookmarks
-                Object.keys(auditTags.bookmarks[fileUri]).forEach(category => {
-                    fileObj.categories[category] = [];
+                    const fileObj = {
+                        fileUri: fileUri,
+                        fileName: path.basename(vscode.Uri.parse(fileUri).fsPath),
+                        categories: {}
+                    };
                     
-                    // Process each bookmark
-                    auditTags.bookmarks[fileUri][category].forEach(bookmark => {
-                        // Mark as processed
-                        bookmark.processed = true;
+                    // Process each category of bookmarks
+                    Object.keys(auditTags.bookmarks[fileUri]).forEach(category => {
+                        fileObj.categories[category] = [];
                         
-                        // Get the file path from URI
-                        const filePath = vscode.Uri.parse(fileUri).fsPath;
-                        
-                        // Create deeplink for this bookmark
-                        // Format: windsurf://file//<filepath>:<line>
-                        const deeplink = `windsurf://file/${filePath}:${bookmark.range.start.line + 1}`;
-                        
-                        // Create a clean version for JSON
-                        const cleanBookmark = {
-                            id: crypto.createHash('sha1').update(JSON.stringify({
-                                uri: fileUri,
-                                category: category,
-                                line: bookmark.range.start.line,
-                                text: bookmark.text.trim()
-                            })).digest('hex'),
-                            text: bookmark.text,
-                            line: bookmark.range.start.line,
-                            processed: true,
-                            deeplink: deeplink, // Add the deeplink
-                            range: {
-                                start: {
+                        // Process each bookmark
+                        auditTags.bookmarks[fileUri][category].forEach(bookmark => {
+                            // Mark as processed
+                            bookmark.processed = true;
+                            
+                            // Get the file path from URI
+                            const filePath = vscode.Uri.parse(fileUri).fsPath;
+                            
+                            // Create deeplink for this bookmark
+                            // Format: windsurf://file//<filepath>:<line>
+                            const deeplink = `windsurf://file/${filePath}:${bookmark.range.start.line + 1}`;
+                            
+                            // Create a clean version for JSON
+                            const cleanBookmark = {
+                                id: crypto.createHash('sha1').update(JSON.stringify({
+                                    uri: fileUri,
+                                    category: category,
                                     line: bookmark.range.start.line,
-                                    character: bookmark.range.start.character
-                                },
-                                end: {
-                                    line: bookmark.range.end.line,
-                                    character: bookmark.range.end.character
+                                    text: bookmark.text.trim()
+                                })).digest('hex'),
+                                text: bookmark.text,
+                                line: bookmark.range.start.line,
+                                processed: true,
+                                deeplink: deeplink, // Add the deeplink
+                                range: {
+                                    start: {
+                                        line: bookmark.range.start.line,
+                                        character: bookmark.range.start.character
+                                    },
+                                    end: {
+                                        line: bookmark.range.end.line,
+                                        character: bookmark.range.end.character
+                                    }
                                 }
-                            }
-                        };
-                        
-                        fileObj.categories[category].push(cleanBookmark);
+                            };
+                            
+                            fileObj.categories[category].push(cleanBookmark);
+                        });
                     });
+                    
+                    bookmarksArray.push(fileObj);
                 });
                 
-                bookmarksArray.push(fileObj);
+                // Create debug info object
+                const debugInfo = {
+                    timestamp: new Date().toISOString(),
+                    totalFiles: bookmarksArray.length,
+                    bookmarks: bookmarksArray
+                };
+                
+                // Copy to clipboard
+                const jsonString = JSON.stringify(debugInfo, null, 2);
+                await vscode.env.clipboard.writeText(jsonString);
+                vscode.window.showInformationMessage(
+                    `Processed ${debugInfo.totalFiles} files with bookmarks. Debug data copied to clipboard.`
+                );
+                statusBar.hide();
+                
+                // Refresh tree view to reflect processed state
+                treeDataProvider.refresh();
+            } catch (error) {
+                console.error('Error processing bookmarks:', error);
+                statusBar.hide();
+                vscode.window.showErrorMessage(`Error processing bookmarks: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("inlineBookmarks.exportBookmarksToMarkdown", () => {
+            // Get all bookmarks
+            const allBookmarks = [];
+            Object.keys(auditTags.bookmarks).forEach(uri => {
+                const filePath = vscode.Uri.parse(uri).fsPath;
+                const fileName = path.basename(filePath);
+                
+                Object.keys(auditTags.bookmarks[uri]).forEach(category => {
+                    auditTags.bookmarks[uri][category].forEach(bookmark => {
+                        allBookmarks.push({
+                            fileName,
+                            filePath,
+                            text: bookmark.text,
+                            line: bookmark.range.start.line + 1,
+                            category
+                        });
+                    });
+                });
             });
             
-            // Create debug info object
-            const debugInfo = {
-    context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.showSelectBookmark", () => {
-            auditTags.commands.showSelectBookmark();
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.showSelectVisibleBookmark", () => {
-            auditTags.commands.showSelectVisibleBookmark();
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.listBookmarks", () => {
-            auditTags.commands.showListBookmarks();
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.listVisibleBookmarks", () => {
-            auditTags.commands.showListVisibleBookmarks();
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.scanWorkspace", () => {
-            auditTags.commands.scanWorkspaceBookmarks();
+            // Format as markdown
+            const markdown = allBookmarks.map(bm => 
+                `- **${bm.fileName}:${bm.line}** (${bm.category}): ${bm.text.trim()}`
+            ).join('\n');
+            
+            // Copy to clipboard
+            vscode.env.clipboard.writeText(markdown).then(() => {
+                vscode.window.showInformationMessage('Bookmarks copied to clipboard in markdown format');
+            });
         })
     );
 
