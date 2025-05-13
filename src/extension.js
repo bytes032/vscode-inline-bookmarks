@@ -7,6 +7,7 @@
  * */
 /** imports */
 const vscode = require('vscode');
+const crypto = require('crypto');
 const settings = require('./settings');
 const {InlineBookmarksCtrl} = require('./features/inlineBookmarks');
 
@@ -48,17 +49,9 @@ function onActivate(context) {
                             bookmark.processed = true;
                             processedCount++;
                             
-                            // Generate ID for tracking processed state
-                            const bookmarkId = crypto.createHash('sha1').update(JSON.stringify({
-                                uri: fileUri,
-                                category: category,
-                                line: bookmark.range.start.line,
-                                text: bookmark.text.trim()
-                            })).digest('hex');
-                            
                             // Store processed state if state manager is available
                             if (auditTags._stateManager) {
-                                auditTags._stateManager.setProcessed(bookmarkId, true);
+                                auditTags._stateManager.setProcessed(bookmark.id, true);
                             }
                         });
                     });
@@ -116,7 +109,7 @@ function onActivate(context) {
                         // Process each bookmark
                         auditTags.bookmarks[fileUri][category].forEach(bookmark => {
                             // Only include unprocessed bookmarks
-                            if (bookmark.processed !== true) {
+                            if (!auditTags._stateManager || !auditTags._stateManager.isProcessed(bookmark.id)) {
                                 totalUnprocessed++;
                                 
                                 // Get the file path from URI
@@ -231,7 +224,7 @@ function onActivate(context) {
                         // Process each bookmark
                         auditTags.bookmarks[fileUri][category].forEach(bookmark => {
                             // Only include unprocessed bookmarks
-                            if (bookmark.processed !== true) {
+                            if (!auditTags._stateManager || !auditTags._stateManager.isProcessed(bookmark.id)) {
                                 totalUnprocessed++;
                                 
                                 // Get the file path from URI
@@ -241,17 +234,9 @@ function onActivate(context) {
                                 // Format: windsurf://file//<filepath>:<line>
                                 const deeplink = `windsurf://file/${filePath}:${bookmark.range.start.line + 1}`;
                                 
-                                // Generate bookmark ID for processing later
-                                const bookmarkId = crypto.createHash('sha1').update(JSON.stringify({
-                                    uri: fileUri,
-                                    category: category,
-                                    line: bookmark.range.start.line,
-                                    text: bookmark.text.trim()
-                                })).digest('hex');
-                                
                                 // Save ID for processing after API call
                                 bookmarkIdsToProcess.push({
-                                    id: bookmarkId,
+                                    id: bookmark.id,
                                     fileUri: fileUri,
                                     category: category,
                                     bookmark: bookmark

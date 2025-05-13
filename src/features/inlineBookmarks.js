@@ -227,11 +227,13 @@ class InlineBookmarksCtrl {
          * Bookmark state manager for tracking processed state in JSON file
          * @type {BookmarkStateManager}
          */
-        this.stateManager = null;
+        this._stateManager = null;
         
-        // Initialize the workspace and state manager
-        this.loadFromWorkspace();
+        // Initialize the state manager first
         this._initStateManager();
+        
+        // Then load workspace bookmarks
+        this.loadFromWorkspace();
     }
     
     /**
@@ -241,7 +243,7 @@ class InlineBookmarksCtrl {
     _initStateManager() {
         if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
             const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-            this.stateManager = new BookmarkStateManager(workspaceRoot);
+            this._stateManager = new BookmarkStateManager(workspaceRoot);
             console.log('Bookmark state manager initialized with workspace root:', workspaceRoot);
         } else {
             console.log('No workspace folder available, bookmark states will not be persisted');
@@ -309,7 +311,7 @@ class InlineBookmarksCtrl {
     async _decorateWords(editor, words, style, noAdd) {
         const decoStyle = this.styles[style].type || this.styles['default'].type;
 
-        let locations = this._findWords(editor.document, words);
+        let locations = this._findWords(editor.document, words, style);
         editor.setDecorations(decoStyle, locations);  // set decorations
 
         if (locations.length && !noAdd)
@@ -318,13 +320,13 @@ class InlineBookmarksCtrl {
 
     async _updateBookmarksForWordAndStyle(document, words, style) {
 
-        let locations = this._findWords(document, words);
+        let locations = this._findWords(document, words, style);
 
         if (locations.length)
             this._addBookmark(document, style, locations);
     }
 
-    _findWords(document, words) {
+    _findWords(document, words, style = 'default') {
         const text = document.getText();
         var locations = [];
 
@@ -339,9 +341,20 @@ class InlineBookmarksCtrl {
 
                 var fullLine = document.getWordRangeAtPosition(startPos, /(.+)$/);
 
+                const text = document.getText(new vscode.Range(startPos, fullLine.end));
+                
+                // Generate ID for tracking processed state
+                const bookmarkId = crypto.createHash('sha1').update(JSON.stringify({
+                    uri: document.uri.toString(),
+                    category: style,
+                    line: startPos.line,
+                    text: text.trim()
+                })).digest('hex');
+                
                 var decoration = {
                     range: new vscode.Range(startPos, endPos),
-                    text: document.getText(new vscode.Range(startPos, fullLine.end))
+                    text: text,
+                    id: bookmarkId
                 };
 
                 locations.push(decoration);
