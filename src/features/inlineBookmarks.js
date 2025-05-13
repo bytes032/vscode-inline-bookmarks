@@ -13,6 +13,120 @@ const crypto = require("crypto");
 const settings = require('../settings');
 const os = require("os");
 
+/**
+ * @typedef {Object} BookmarkState
+ * @property {string} id - The bookmark's unique identifier
+ * @property {boolean} processed - Whether the bookmark has been processed
+ */
+
+/**
+ * @typedef {Object} BookmarkStateDatabase
+ * @property {Object.<string, BookmarkState>} bookmarks - Map of bookmark IDs to their states
+ * @property {string} lastUpdated - ISO string of when the database was last updated
+ */
+
+/**
+ * Manages the persistence of bookmark processing states in a local JSON file
+ */
+class BookmarkStateManager {
+    /**
+     * Creates a new BookmarkStateManager
+     * @param {string} workspaceRoot - The root path of the workspace
+     */
+    constructor(workspaceRoot) {
+        this.workspaceRoot = workspaceRoot;
+        this.dbPath = path.join(workspaceRoot, '.vscode', 'bookmark-states.json');
+        this.states = { bookmarks: {}, lastUpdated: new Date().toISOString() };
+        this._loadDatabase();
+    }
+    
+    /**
+     * Loads the bookmark state database from disk
+     * @private
+     */
+    _loadDatabase() {
+        try {
+            // Create .vscode directory if it doesn't exist
+            const vscodeDir = path.join(this.workspaceRoot, '.vscode');
+            if (!fs.existsSync(vscodeDir)) {
+                fs.mkdirSync(vscodeDir, { recursive: true });
+            }
+            
+            // Load existing database or create a new one
+            if (fs.existsSync(this.dbPath)) {
+                const data = fs.readFileSync(this.dbPath, 'utf8');
+                this.states = JSON.parse(data);
+                console.log(`Loaded ${Object.keys(this.states.bookmarks).length} bookmark states`);
+            } else {
+                // Initialize with empty database
+                this._saveDatabase();
+                console.log('Created new bookmark state database');
+            }
+        } catch (error) {
+            console.error('Error loading bookmark state database:', error);
+            // Initialize with empty database on error
+            this.states = { bookmarks: {}, lastUpdated: new Date().toISOString() };
+        }
+    }
+    
+    /**
+     * Saves the bookmark state database to disk
+     * @private
+     */
+    _saveDatabase() {
+        try {
+            this.states.lastUpdated = new Date().toISOString();
+            fs.writeFileSync(this.dbPath, JSON.stringify(this.states, null, 2), 'utf8');
+        } catch (error) {
+            console.error('Error saving bookmark state database:', error);
+        }
+    }
+    
+    /**
+     * Gets the processed state of a bookmark
+     * @param {string} bookmarkId - The unique identifier of the bookmark
+     * @returns {boolean} Whether the bookmark has been processed
+     */
+    isProcessed(bookmarkId) {
+        return Boolean(this.states.bookmarks[bookmarkId]?.processed);
+    }
+    
+    /**
+     * Sets the processed state of a bookmark
+     * @param {string} bookmarkId - The unique identifier of the bookmark
+     * @param {boolean} processed - Whether the bookmark has been processed
+     */
+    setProcessed(bookmarkId, processed) {
+        if (!this.states.bookmarks[bookmarkId]) {
+            this.states.bookmarks[bookmarkId] = { id: bookmarkId, processed: false };
+        }
+        
+        this.states.bookmarks[bookmarkId].processed = Boolean(processed);
+        this._saveDatabase();
+    }
+    
+    /**
+     * Toggles the processed state of a bookmark
+     * @param {string} bookmarkId - The unique identifier of the bookmark
+     * @returns {boolean} The new processed state
+     */
+    toggleProcessed(bookmarkId) {
+        const newState = !this.isProcessed(bookmarkId);
+        this.setProcessed(bookmarkId, newState);
+        return newState;
+    }
+    
+    /**
+     * Gets all processed bookmark IDs
+     * @returns {string[]} Array of processed bookmark IDs
+     */
+    getProcessedBookmarks() {
+        return Object.entries(this.states.bookmarks)
+            .filter(([, state]) => state.processed)
+            .map(([id]) => id);
+    }
+}
+
 class Commands {
     constructor(controller) {
         this.controller = controller;
@@ -158,16 +272,53 @@ class Commands {
 }
 
 class InlineBookmarksCtrl {
-
+    /**
+     * @param {vscode.ExtensionContext} context - The VS Code extension context
+     */
     constructor(context) {
         this.context = context;
         this.styles = this._reLoadDecorations();
         this.words = this._reLoadWords();
-
+        
         this.commands = new Commands(this);
+        
+        /**
+         * The decoration cache
+         * @type {Map<string, any>}
+         */
+        this.decorationCache = new Map();
 
-        this.bookmarks = {};  // {file: {bookmark}}
+        /**
+         * Bookmarks storage
+         * bookmark: {range, text, id}
+         * this.bookmarks[uri][style] = [bookmark];
+         * @type {Object.<string, Object.<string, Array<{range: vscode.Range, text: string, id: string}>>>}
+         */
+        this.bookmarks = {};
+        
+        /**
+         * Bookmark state manager for tracking processed state in JSON file
+         * @type {BookmarkStateManager}
+         */
+        this.stateManager = null;
+        
+        // Initialize the workspace and state manager
         this.loadFromWorkspace();
+        this._initStateManager();
+    }
+    
+    /**
+     * Initializes the bookmark state manager
+     * @private
+     */
+    _initStateManager() {
+        if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+            const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+            this.stateManager = new BookmarkStateManager(workspaceRoot);
+            console.log('Bookmark state manager initialized with workspace root:', workspaceRoot);
+        } else {
+            console.log('No workspace folder available, bookmark states will not be persisted');
+        }
     }
 
     /** -- public -- */
@@ -554,6 +705,39 @@ class InlineBookmarkTreeDataProvider {
         item.id = element.type == NodeType.LOCATION ? this._getId(element.location) : this._getId(element.resource);
         item.resourceUri = element.resource;
         item.iconPath = element.iconPath;
+        
+        // Add processed status to bookmarks (if applicable)
+        if (element.type === NodeType.LOCATION) {
+            item.contextValue = 'bookmark';
+            
+            // Check if this bookmark is processed
+            const fileUri = element.resource.toString();
+            const line = element.location.range.start.line;
+            const text = element.label.trim();
+            let processed = false;
+            
+            // Find the bookmark in the controller data
+            if (this.controller.bookmarks[fileUri]) {
+                for (const category of Object.keys(this.controller.bookmarks[fileUri])) {
+                    const bookmarks = this.controller.bookmarks[fileUri][category];
+                    for (const bookmark of bookmarks) {
+                        if (bookmark.range.start.line === line && bookmark.text.trim() === text) {
+                            if (bookmark.processed === true) {
+                                processed = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (processed) break;
+                }
+            }
+            
+            // Add description for processed bookmarks
+            if (processed) {
+                item.description = '✓ Processed';
+            }
+        }
+        
         item.command = element.type == NodeType.LOCATION && element.location ? {
             command: 'inlineBookmarks.jumpToRange',
             arguments: [element.location.uri, element.location.range],
