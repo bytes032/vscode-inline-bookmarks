@@ -84,16 +84,25 @@ function onActivate(context) {
                 statusBar.text = "$(json) Exporting bookmarks to JSON...";
                 statusBar.show();
                 
-                // Get project name from configuration (with fallback to workspace folder name)
+                // Get project name from configuration
                 const config = vscode.workspace.getConfiguration('inline-bookmarks');
                 let projectName = config.get('project.name') || '';
                 
-                // If project name has the default variable ${workspaceFolderBasename}, replace it
-                if (projectName === '${workspaceFolderBasename}' && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-                    projectName = vscode.workspace.workspaceFolders[0].name;
-                } else if (projectName === '${workspaceFolderBasename}') {
-                    // Fallback if no workspace is open
-                    projectName = 'unknown-project';
+                // If project name is not set or is the default variable, check workspace
+                if (projectName === '${workspaceFolderBasename}') {
+                    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                        projectName = vscode.workspace.workspaceFolders[0].name;
+                    } else {
+                        // If no workspace is open and no project name is specified, abort
+                        statusBar.hide();
+                        vscode.window.showErrorMessage('Project name not set. Please configure inline-bookmarks.project.name in settings.');
+                        return;
+                    }
+                } else if (!projectName) {
+                    // Empty project name
+                    statusBar.hide();
+                    vscode.window.showErrorMessage('Project name not set. Please configure inline-bookmarks.project.name in settings.');
+                    return;
                 }
                 
                 // Array to store simplified bookmark data
@@ -167,22 +176,43 @@ function onActivate(context) {
                 const path = require('path');
                 const crypto = require('crypto');
                 const https = require('https');
-                const http = require('http');
                 
-                // Get API settings and project name from configuration
+                // Get API settings from configuration
                 const config = vscode.workspace.getConfiguration('inline-bookmarks');
-                const apiUrl = config.get('api.url') || 'https://api.example.com/bookmarks';
-                const apiKey = config.get('api.key') || 'demo-key-12345';
+                const apiUrl = config.get('api.url');
+                const apiKey = config.get('api.key');
                 
-                // Get project name (with fallback to workspace folder name)
+                // Validate API URL and key
+                if (!apiUrl || apiUrl === 'https://api.example.com/bookmarks') {
+                    statusBar.hide();
+                    vscode.window.showErrorMessage('API URL not configured. Please set inline-bookmarks.api.url in settings.');
+                    return;
+                }
+                
+                if (!apiKey || apiKey === 'demo-key-12345') {
+                    statusBar.hide();
+                    vscode.window.showErrorMessage('API key not configured. Please set inline-bookmarks.api.key in settings.');
+                    return;
+                }
+                
+                // Get project name from configuration
                 let projectName = config.get('project.name') || '';
                 
-                // If project name has the default variable ${workspaceFolderBasename}, replace it
-                if (projectName === '${workspaceFolderBasename}' && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-                    projectName = vscode.workspace.workspaceFolders[0].name;
-                } else if (projectName === '${workspaceFolderBasename}') {
-                    // Fallback if no workspace is open
-                    projectName = 'unknown-project';
+                // If project name is not set or is the default variable, check workspace
+                if (projectName === '${workspaceFolderBasename}') {
+                    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                        projectName = vscode.workspace.workspaceFolders[0].name;
+                    } else {
+                        // If no workspace is open and no project name is specified, abort
+                        statusBar.hide();
+                        vscode.window.showErrorMessage('Project name not set. Please configure inline-bookmarks.project.name in settings.');
+                        return;
+                    }
+                } else if (!projectName) {
+                    // Empty project name
+                    statusBar.hide();
+                    vscode.window.showErrorMessage('Project name not set. Please configure inline-bookmarks.project.name in settings.');
+                    return;
                 }
                 
                 // Refresh and scan workspace for up-to-date bookmarks
@@ -256,16 +286,13 @@ function onActivate(context) {
                 
                 // Create promise for API request
                 const apiCallPromise = new Promise((resolve, reject) => {
-                    // Determine if http or https should be used
-                    const httpModule = apiUrl.startsWith('https:') ? https : http;
-                    
                     // Parse URL
                     const urlObj = new URL(apiUrl);
                     
                     // Prepare request options
                     const options = {
                         hostname: urlObj.hostname,
-                        port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+                        port: urlObj.port || 443,
                         path: urlObj.pathname + urlObj.search,
                         method: 'POST',
                         headers: {
@@ -274,8 +301,8 @@ function onActivate(context) {
                         }
                     };
                     
-                    // Create request
-                    const req = httpModule.request(options, (res) => {
+                    // Create request (using HTTPS only)
+                    const req = https.request(options, (res) => {
                         let data = '';
                         
                         // Collect response data
