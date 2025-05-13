@@ -39,11 +39,8 @@
     },
     "activationEvents": [
         "*",
-        "onCommand:inlineBookmarks.refresh",
         "onCommand:inlineBookmarks.debug.state.reset",
-        "onCommand:inlineBookmarks.scanWorkspace",
-        "onCommand:inlineBookmarks.processBookmarks", 
-        "onCommand:inlineBookmarks.exportBookmarksToMarkdown"
+        "onCommand:inlineBookmarks.processBookmarks"
     ],
     "main": "./src/extension.js",
     "contributes": {
@@ -54,39 +51,12 @@
                 "category": "InlineBookmarks:Debug"
             },
             {
-                "command": "inlineBookmarks.refresh",
-                "title": "Refresh Bookmarks",
-                "category": "InlineBookmarks",
-                "icon": {
-                    "light": "images/refresh-light.svg",
-                    "dark": "images/refresh-dark.svg"
-                }
-            },
-            {
-                "command": "inlineBookmarks.scanWorkspace",
-                "title": "Scan Workspace for Bookmarks",
-                "category": "InlineBookmarks",
-                "icon": {
-                    "light": "images/scan-workspace.svg",
-                    "dark": "images/scan-workspace-dark.svg"
-                }
-            },
-            {
                 "command": "inlineBookmarks.debug.state.reset",
                 "title": "Reset internal state",
                 "category": "InlineBookmarks:Debug"
-            },
-            {
-                "command": "inlineBookmarks.exportBookmarksToMarkdown",
-                "title": "Export Bookmarks to Markdown",
-                "category": "InlineBookmarks"
             }
         ],
-        "views": {
-            "explorer": []
-        },
-        "menus": {
-        },
+
         "configuration": {
             "type": "object",
             "title": "Inline Bookmarks",
@@ -97,60 +67,7 @@
                     "default": true,
                     "description": "Enable/Disable the extension."
                 },
-                "inline-bookmarks.view.showVisibleFilesOnly": {
-                    "category": "view",
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Show bookmarks for visible editors/files only."
-                },
-                "inline-bookmarks.view.showVisibleFilesOnlyMode": {
-                    "category": "view",
-                    "type": "string",
-                    "enum": [
-                        "allVisibleEditors",
-                        "onlyActiveEditor"
-                    ],
-                    "default": "allVisibleEditors",
-                    "description": "Select 'Show Visible editors only' mode. Either show bookmarks for all visible editors or only for the currently selected editor. default: All Visible Editors"
-                },
-                "inline-bookmarks.view.expanded": {
-                    "category": "view",
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Keep File View expanded otherwise collapsed."
-                },
-                "inline-bookmarks.view.follow": {
-                    "category": "view",
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Follow bookmarks while clicking in the editor window. Highlights nearest bookmarks in the bookmarks view. (see `view.followMode` to change the follow behavior)"
-                },
-                "inline-bookmarks.view.followMode": {
-                    "category": "view",
-                    "type": "string",
-                    "enum": [
-                        "nearest",
-                        "chapter"
-                    ],
-                    "default": "nearest",
-                    "markdownDescription": "Follow mode for highlighting bookmarks in the bookmarks view. **nearest** (Default): highlight nearest bookmark relative to the current selection. **chapter**: highlight nearest bookmark before or on the currently selected line."
-                },
-                "inline-bookmarks.view.lineMode": {
-                    "category": "view",
-                    "type": "string",
-                    "enum": [
-                        "selected-bookmark",
-                        "current-line"
-                    ],
-                    "default": "selected-bookmark",
-                    "description": "Defines Jump to Next/Previous Bookmark behavior. **selected-bookmark** (Default): jump based on selected bookmark in editor. **current-line**: jump based on the current selected line number in the editor."
-                },
-                "inline-bookmarks.view.words.hide": {
-                    "category": "view",
-                    "type": "boolean",
-                    "default": false,
-                    "markdownDescription": "Hide tags/trigger words in bookmark view if a comment was provided."
-                },
+
                 "inline-bookmarks.view.exclude.gitIgnore": {
                     "category": "view",
                     "type": "boolean",
