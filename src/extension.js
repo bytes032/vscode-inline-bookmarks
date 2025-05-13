@@ -84,9 +84,6 @@ function onActivate(context) {
                 statusBar.text = "$(json) Exporting bookmarks to JSON...";
                 statusBar.show();
                 
-                // Import required modules
-                const path = require('path');
-                
                 // Array to store simplified bookmark data
                 const unprocessedBookmarks = [];
                 let totalUnprocessed = 0;
@@ -119,15 +116,8 @@ function onActivate(context) {
                     });
                 });
                 
-                // Create the simplified output object
-                const output = {
-                    timestamp: new Date().toISOString(),
-                    totalUnprocessed: totalUnprocessed,
-                    bookmarks: unprocessedBookmarks
-                };
-                
-                // Copy to clipboard
-                const jsonString = JSON.stringify(output, null, 2);
+                // Copy just the bookmarks array to clipboard
+                const jsonString = JSON.stringify(unprocessedBookmarks, null, 2);
                 await vscode.env.clipboard.writeText(jsonString);
                 
                 // Hide status bar and show success message
@@ -144,6 +134,175 @@ function onActivate(context) {
 
     
 
+    /**
+     * Sync bookmarks command - exports unprocessed bookmarks, makes API call, and marks as processed
+     */
+    context.subscriptions.push(
+        vscode.commands.registerCommand("inlineBookmarks.syncBookmarks", async () => {
+            try {
+                // Show status bar indicator
+                const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+                statusBar.text = "$(sync) Syncing bookmarks...";
+                statusBar.show();
+                
+                // Import required modules
+                const path = require('path');
+                const crypto = require('crypto');
+                const https = require('https');
+                const http = require('http');
+                
+                // Get API settings from configuration
+                const config = vscode.workspace.getConfiguration('inline-bookmarks');
+                const apiUrl = config.get('api.url') || 'https://api.example.com/bookmarks';
+                const apiKey = config.get('api.key') || 'demo-key-12345';
+                
+                // Refresh and scan workspace for up-to-date bookmarks
+                auditTags.commands.refresh();
+                await auditTags.commands.scanWorkspaceBookmarks();
+                
+                // Array to store bookmark data and track IDs for processing later
+                const unprocessedBookmarks = [];
+                const bookmarkIdsToProcess = [];
+                let totalUnprocessed = 0;
+                
+                // Process all bookmarks in all files
+                Object.keys(auditTags.bookmarks).forEach(fileUri => {
+                    // Process each category of bookmarks
+                    Object.keys(auditTags.bookmarks[fileUri]).forEach(category => {
+                        // Process each bookmark
+                        auditTags.bookmarks[fileUri][category].forEach(bookmark => {
+                            // Only include unprocessed bookmarks
+                            if (bookmark.processed !== true) {
+                                totalUnprocessed++;
+                                
+                                // Get the file path from URI
+                                const filePath = vscode.Uri.parse(fileUri).fsPath;
+                                
+                                // Create deeplink for this bookmark
+                                // Format: windsurf://file//<filepath>:<line>
+                                const deeplink = `windsurf://file/${filePath}:${bookmark.range.start.line + 1}`;
+                                
+                                // Generate bookmark ID for processing later
+                                const bookmarkId = crypto.createHash('sha1').update(JSON.stringify({
+                                    uri: fileUri,
+                                    category: category,
+                                    line: bookmark.range.start.line,
+                                    text: bookmark.text.trim()
+                                })).digest('hex');
+                                
+                                // Save ID for processing after API call
+                                bookmarkIdsToProcess.push({
+                                    id: bookmarkId,
+                                    fileUri: fileUri,
+                                    category: category,
+                                    bookmark: bookmark
+                                });
+                                
+                                // Create simplified bookmark object
+                                unprocessedBookmarks.push({
+                                    text: bookmark.text,
+                                    deeplink: deeplink,
+                                    type: category
+                                });
+                            }
+                        });
+                    });
+                });
+                
+                // If there are no unprocessed bookmarks, show message and return
+                if (totalUnprocessed === 0) {
+                    statusBar.hide();
+                    vscode.window.showInformationMessage('No unprocessed bookmarks found.');
+                    return;
+                }
+                
+                // Make API call with the unprocessed bookmarks - direct array format
+                statusBar.text = `$(sync~spin) Sending ${totalUnprocessed} bookmarks to API...`;
+                
+                // Create promise for API request
+                const apiCallPromise = new Promise((resolve, reject) => {
+                    // Determine if http or https should be used
+                    const httpModule = apiUrl.startsWith('https:') ? https : http;
+                    
+                    // Parse URL
+                    const urlObj = new URL(apiUrl);
+                    
+                    // Prepare request options
+                    const options = {
+                        hostname: urlObj.hostname,
+                        port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+                        path: urlObj.pathname + urlObj.search,
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`,
+                            'User-Agent': 'VSCode-InlineBookmarks-Extension'
+                        }
+                    };
+                    
+                    // Create request
+                    const req = httpModule.request(options, (res) => {
+                        let data = '';
+                        
+                        // Collect response data
+                        res.on('data', (chunk) => {
+                            data += chunk;
+                        });
+                        
+                        // Handle response completion
+                        res.on('end', () => {
+                            if (res.statusCode >= 200 && res.statusCode < 300) {
+                                // Success
+                                resolve({
+                                    status: res.statusCode,
+                                    data: data
+                                });
+                            } else {
+                                // Error
+                                reject(new Error(`API request failed with status ${res.statusCode}: ${data}`));
+                            }
+                        });
+                    });
+                    
+                    // Handle request errors
+                    req.on('error', (error) => {
+                        reject(error);
+                    });
+                    
+                    // Send data - direct array of bookmarks
+                    req.write(JSON.stringify(unprocessedBookmarks));
+                    req.end();
+                });
+                
+                // Wait for API call to complete
+                const apiResponse = await apiCallPromise;
+                
+                // Mark all bookmarks as processed
+                statusBar.text = "$(check) Marking bookmarks as processed...";
+                
+                // Process all bookmarks
+                bookmarkIdsToProcess.forEach(item => {
+                    // Mark the bookmark object as processed
+                    item.bookmark.processed = true;
+                    
+                    // If we have a state manager, update it
+                    if (auditTags._stateManager) {
+                        auditTags._stateManager.setProcessed(item.id, true);
+                    }
+                });
+                
+                // Show success message
+                statusBar.hide();
+                vscode.window.showInformationMessage(
+                    `Synced ${totalUnprocessed} bookmarks to API and marked them as processed.`
+                );
+            } catch (error) {
+                console.error('Error syncing bookmarks:', error);
+                vscode.window.showErrorMessage(`Error syncing bookmarks: ${error.message}`);
+            }
+        })
+    );
+    
     /** module init */
     auditTags.commands.refresh();
 
