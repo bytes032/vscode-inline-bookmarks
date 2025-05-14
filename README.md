@@ -2,8 +2,6 @@
 
 A powerful VS Code extension for managing inline bookmarks with enhanced export and state management capabilities.
 
-![Bookmarks Preview](images/icon_large.png)
-
 ## Overview
 
 bytes032 Bookmarks is a feature-rich VS Code extension that enables you to mark, track, and manage inline bookmarks in your code. It provides customizable bookmark types, state tracking, and powerful export functionality to external systems.
