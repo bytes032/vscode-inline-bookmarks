@@ -1,7 +1,5 @@
 # bytes032 bookmarks
 
-![bytes032 bookmarks Logo](images/icon.png)
-
 Code navigation for inline bookmarks made easy, with enhanced export and state management capabilities.
 
 ## Overview
