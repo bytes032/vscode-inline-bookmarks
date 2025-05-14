@@ -2,8 +2,11 @@
     "name": "bytes032-bookmarks",
     "scripts": {
         "package": "vsce package",
-        "lint": "eslint src/**/*.js",
-        "test": "echo \"No tests specified\""
+        "lint": "eslint src/**/*.ts",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "build": "tsc -p ./",
+        "prepackage": "npm run build"
     },
     "displayName": "bytes032 Bookmarks",
     "description": "Customizable bookmarks with efficient export and sync functionality that respects bookmark processed states",
@@ -42,7 +45,7 @@
         "onCommand:bytes032Bookmarks.exportToJson",
         "onCommand:bytes032Bookmarks.syncBookmarks"
     ],
-    "main": "./src/extension.js",
+    "main": "./out/extension.js",
     "contributes": {
         "commands": [
             {
@@ -195,8 +198,11 @@
         "vscode-uri": "^3.0.7"
     },
     "devDependencies": {
+        "@types/node": "^20.11.30",
+        "@types/vscode": "^1.60.0",
         "eslint": "^9.26.0",
         "eslint-plugin-jsdoc": "^50.6.14",
+        "typescript": "^5.4.5",
         "vsce": "^2.15.0"
     }
 }
