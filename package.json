@@ -48,28 +48,28 @@
             {
                 "command": "bytes032Bookmarks.processBookmarks",
                 "title": "Process Bookmarks",
-                "category": "bytes032 Bookmarks"
+                "category": "bytes032 bookmarks"
             },
             {
                 "command": "bytes032Bookmarks.exportToJson",
                 "title": "Export Bookmarks to JSON",
-                "category": "bytes032 Bookmarks"
+                "category": "bytes032 bookmarks"
             },
             {
                 "command": "bytes032Bookmarks.syncBookmarks",
                 "title": "Sync Bookmarks (Export, API, Process)",
-                "category": "bytes032 Bookmarks"
+                "category": "bytes032 bookmarks"
             },
             {
                 "command": "bytes032Bookmarks.debug.state.reset",
                 "title": "Reset internal state",
-                "category": "bytes032 Bookmarks:Debug"
+                "category": "bytes032 bookmarks:debug"
             }
         ],
 
         "configuration": {
             "type": "object",
-            "title": "bytes032 Bookmarks",
+            "title": "bytes032 bookmarks",
             "properties": {
                 "bytes032-bookmarks.enable": {
                     "category": "general",
