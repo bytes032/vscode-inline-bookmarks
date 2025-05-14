@@ -31,23 +31,6 @@ The extension supports different bookmark styles, each with customizable trigger
 
 When you include these trigger words in your code comments, they are automatically detected and highlighted with gutter icons and ruler marks.
 
-```javascript
-// @todo This function needs optimization
-function slowFunction() {
-  // ...
-}
-
-// @audit Potential security issue here
-function insecureFunction() {
-  // ...
-}
-
-// @audit-ok This code has been verified
-function verifiedFunction() {
-  // ...
-}
-```
-
 ### 🔄 Bookmark State Management
 
 A key feature of this extension is the ability to track which bookmarks have been processed:
@@ -72,12 +55,12 @@ Example export format:
   "project": "my-project",
   "bookmarks": [
     {
-      "text": "// @audit This needs security review",
+      "text": "// This needs security review",
       "deeplink": "windsurf://file/path/to/file.js:42",
       "type": "red"
     },
     {
-      "text": "// @todo Implement this feature",
+      "text": "// Implement this feature",
       "deeplink": "windsurf://file/path/to/another.js:15",
       "type": "blue"
     }
@@ -233,7 +216,3 @@ If bookmarks are not being detected:
 ## Credits
 
 This extension is a fork of [Inline Bookmarks](https://github.com/tintinweb/vscode-inline-bookmarks) with enhanced functionality for bookmark state management, export, and API integration.
-
-## License
-
-GPLv3
