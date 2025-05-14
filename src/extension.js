@@ -16,14 +16,14 @@ function onActivate(context) {
     const auditTags = new InlineBookmarksCtrl(context);
 
     context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.debug.state.reset", () => {
+        vscode.commands.registerCommand("bytes032Bookmarks.debug.state.reset", () => {
             auditTags.resetWorkspace();
             auditTags.loadFromWorkspace();
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.processBookmarks", async () => {
+        vscode.commands.registerCommand("bytes032Bookmarks.processBookmarks", async () => {
             try {
                 // Show status while processing
                 const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
@@ -70,7 +70,7 @@ function onActivate(context) {
     );
     
     context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.exportToJson", async () => {
+        vscode.commands.registerCommand("bytes032Bookmarks.exportToJson", async () => {
             try {
                 // Show status while exporting
                 const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
@@ -78,7 +78,7 @@ function onActivate(context) {
                 statusBar.show();
                 
                 // Get project name from configuration
-                const config = vscode.workspace.getConfiguration('inline-bookmarks');
+                const config = vscode.workspace.getConfiguration('bytes032-bookmarks');
                 let projectName = config.get('project.name') || '';
                 
                 // If project name is not set or is the default variable, check workspace
@@ -88,13 +88,13 @@ function onActivate(context) {
                     } else {
                         // If no workspace is open and no project name is specified, abort
                         statusBar.hide();
-                        vscode.window.showErrorMessage('Project name not set. Please configure inline-bookmarks.project.name in settings.');
+                        vscode.window.showErrorMessage('Project name not set. Please configure bytes032-bookmarks.project.name in settings.');
                         return;
                     }
                 } else if (!projectName) {
                     // Empty project name
                     statusBar.hide();
-                    vscode.window.showErrorMessage('Project name not set. Please configure inline-bookmarks.project.name in settings.');
+                    vscode.window.showErrorMessage('Project name not set. Please configure bytes032-bookmarks.project.name in settings.');
                     return;
                 }
                 
@@ -158,7 +158,7 @@ function onActivate(context) {
      * Sync bookmarks command - exports unprocessed bookmarks, makes API call, and marks as processed
      */
     context.subscriptions.push(
-        vscode.commands.registerCommand("inlineBookmarks.syncBookmarks", async () => {
+        vscode.commands.registerCommand("bytes032Bookmarks.syncBookmarks", async () => {
             try {
                 // Show status bar indicator
                 const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
@@ -171,20 +171,20 @@ function onActivate(context) {
                 const https = require('https');
                 
                 // Get API settings from configuration
-                const config = vscode.workspace.getConfiguration('inline-bookmarks');
+                const config = vscode.workspace.getConfiguration('bytes032-bookmarks');
                 const apiUrl = config.get('api.url');
                 const apiKey = config.get('api.key');
                 
                 // Validate API URL and key
                 if (!apiUrl || apiUrl === 'https://api.example.com/bookmarks') {
                     statusBar.hide();
-                    vscode.window.showErrorMessage('API URL not configured. Please set inline-bookmarks.api.url in settings.');
+                    vscode.window.showErrorMessage('API URL not configured. Please set bytes032-bookmarks.api.url in settings.');
                     return;
                 }
                 
                 if (!apiKey || apiKey === 'demo-key-12345') {
                     statusBar.hide();
-                    vscode.window.showErrorMessage('API key not configured. Please set inline-bookmarks.api.key in settings.');
+                    vscode.window.showErrorMessage('API key not configured. Please set bytes032-bookmarks.api.key in settings.');
                     return;
                 }
                 
@@ -198,13 +198,13 @@ function onActivate(context) {
                     } else {
                         // If no workspace is open and no project name is specified, abort
                         statusBar.hide();
-                        vscode.window.showErrorMessage('Project name not set. Please configure inline-bookmarks.project.name in settings.');
+                        vscode.window.showErrorMessage('Project name not set. Please configure bytes032-bookmarks.project.name in settings.');
                         return;
                     }
                 } else if (!projectName) {
                     // Empty project name
                     statusBar.hide();
-                    vscode.window.showErrorMessage('Project name not set. Please configure inline-bookmarks.project.name in settings.');
+                    vscode.window.showErrorMessage('Project name not set. Please configure bytes032-bookmarks.project.name in settings.');
                     return;
                 }
                 

@@ -9,7 +9,7 @@
 const vscode = require('vscode');
 
 function extensionConfig() {
-    return vscode.workspace.getConfiguration('inline-bookmarks');
+    return vscode.workspace.getConfiguration('bytes032-bookmarks');
 }
 
 module.exports = {
