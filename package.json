@@ -10,7 +10,7 @@
     },
     "displayName": "bytes032 Bookmarks",
     "description": "Customizable bookmarks with efficient export and sync functionality that respects bookmark processed states",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "license": "GPLv3",
     "keywords": [
         "bookmark",
